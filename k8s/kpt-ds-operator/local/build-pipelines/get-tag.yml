@@ -1,0 +1,38 @@
+parameters:  
+- name: dependsOn  
+  type: string  
+  default: ''
+- name: major
+  type: string  
+- name: minor
+  type: string  
+
+jobs:
+- job: getTag
+  displayName: 'Get Next Tag'
+  dependsOn: ${{ parameters.dependsOn }}
+  steps:
+    - checkout: self
+      persistCredentials: true
+
+    - task: Bash@3
+      displayName: 'Get next tag from repo'
+      name: git
+      inputs:
+        workingDirectory: "$(System.DefaultWorkingDirectory)"
+        targetType: 'inline'
+        script: |
+          git fetch --tags
+          tags=$(git tag -l --sort -version:refname)
+
+          greatest_release=$(echo "${tags}" | grep -e "$(major).$(minor)" | head -n 1)
+          release_patch=$(echo ${greatest_release} | awk -F. '{print $NF}')
+          current_tag="$(major).$(minor).${release_patch}"
+          echo "Current tag version: ${current_tag}"
+
+          next_patch=$((release_patch + 1))
+          next_tag="$(major).$(minor).${next_patch}"
+          echo "Computed next tag version to be ${next_tag}"
+
+          echo "##vso[task.setvariable variable=currentTag;isOutput=true]${current_tag}"
+          echo "##vso[task.setvariable variable=nextTag;isOutput=true]${next_tag}"

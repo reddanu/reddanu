@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kpt-ds-csi-operator:latest
+    container_name: kpt-ds-csi-operator
+    environment:
+      - KUBECONFIG=/app/.kube/config
+    volumes:
+      - ${HOME}/.kube:/app/.kube:ro
+    command: >
+      --namespace=kube-system
+      --daemonset=vsphere-csi-node
+      --toleration-key=dedicated
+      --toleration-value=prometheus
+      --toleration-effect=NoSchedule
+    profiles:
+      - dev
+      - prod

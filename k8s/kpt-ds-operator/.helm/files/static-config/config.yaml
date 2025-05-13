@@ -1,0 +1,24 @@
+# Configuration file for kpt-ds-csi-operator
+
+# Operator settings
+operator:
+  # Log level: debug, info, warn, error
+  logLevel: info
+  # Resync period in seconds
+  resyncPeriod: 30
+
+# Target DaemonSet configuration
+daemonSet:
+  # Namespace of the DaemonSet to monitor
+  namespace: kube-system
+  # Name of the DaemonSet to monitor
+  name: vsphere-csi-node
+
+# Toleration to be enforced
+toleration:
+  # Key of the toleration
+  key: dedicated
+  # Value of the toleration
+  value: prometheus
+  # Effect of the toleration (NoSchedule, PreferNoSchedule, NoExecute)
+  effect: NoSchedule

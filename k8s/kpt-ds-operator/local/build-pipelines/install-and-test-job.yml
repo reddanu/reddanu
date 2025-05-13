@@ -1,0 +1,129 @@
+parameters:   
+- name: helmVersion  
+  type: string
+- name: region
+  type: string
+  default: ''
+- name: serviceConnection
+  type: string
+  default: ''
+- name: clusterName
+  type: string
+  default: ''
+- name: namespace
+  type: string
+  default: 'kube-system'
+- name: repoName
+  type: string
+  default: 'kpt-ds-csi-operator'
+- name: releaseName
+  type: string
+  default: 'kpt-ds-csi-operator'
+- name: valueFile
+  type: string
+- name: releaseTag
+  type: string
+- name: releaseSuffix
+  type: string
+  default: ''
+- name: enableTests
+  type: boolean
+  default: false
+- name: enableInstall
+  type: boolean
+  default: false
+- name: dependsOn
+  type: string
+  default: ''
+- name: prRun
+  type: boolean
+  default: true
+
+jobs:
+- ${{ if or(eq(parameters['enableTests'], true), eq(parameters['enableInstall'], true)) }}:
+  - job: DeployAPI
+    displayName: 'Install & Test Artifacts'
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: succeeded()
+    container: 'artifactory.chrobinson.com:5005/chr/cloud_azure_build_image:latest'
+    variables:
+      releaseTag: ${{ parameters.releaseTag }}
+      releaseSuffix: ${{ parameters.releaseSuffix }}
+      artifact: ${{ parameters.repoName }}-${{ parameters.releaseTag }}${{ parameters.releaseSuffix }}.tgz
+      
+    steps:
+      - task: DownloadPipelineArtifact@2
+        displayName: "Download Helm Chart Artifacts"
+        inputs:
+          buildType: 'current'
+          artifactName: '${{ parameters.repoName }}-${{ parameters.releaseTag }}${{ parameters.releaseSuffix }}.tgz'
+          targetPath: $(System.DefaultWorkingDirectory)/.helm/build
+          
+      - task: Bash@3
+        displayName: 'Debug Artifacts'
+        inputs:
+          targetType: 'inline'
+          script: |
+            echo "Looking for artifact: ${{ parameters.repoName }}-${{ parameters.releaseTag }}${{ parameters.releaseSuffix }}.tgz"
+            echo "Available artifacts:"
+            find $(Pipeline.Workspace) -type f -name "*.tgz" | sort
+            echo "Files in build directory:"
+            find $(System.DefaultWorkingDirectory)/.helm/build -type f | sort
+            
+      # Deploy to Rancher RKE2 cluster
+      - task: HelmDeploy@1
+        displayName: 'Helm upgrade to Rancher RKE2'
+        inputs:
+          connectionType: 'Kubernetes Service Connection'
+          kubernetesServiceConnection: ${{ parameters.serviceConnection }}
+          namespace: ${{ parameters.namespace }}
+          updatedependency: true
+          command: 'upgrade'
+          chartType: 'FilePath'
+          chartPath: "$(System.DefaultWorkingDirectory)/.helm/build/${{ parameters.repoName }}-${{ parameters.releaseTag }}${{ parameters.releaseSuffix }}.tgz"
+          overrideValues: 'image.tag=${{ parameters.releaseTag }}${{ parameters.releaseSuffix }},image.repository=artifactory.chrobinson.com:5005/chr/${{ parameters.repoName }},replicaCount=1'
+          valueFile: '$(System.DefaultWorkingDirectory)/${{ parameters.valueFile }}'
+          install: true
+          releaseName: 'kpt-ds-csi-operator'
+          arguments: "--atomic --debug --timeout 2m0s --force"
+      
+      - task: Bash@3
+        displayName: 'Wait for deployment to stabilize'
+        inputs:
+          targetType: 'inline'
+          script: |
+            echo "Waiting for deployment to stabilize..."
+            sleep 20
+      
+      - task: Kubernetes@1
+        displayName: 'Verify Deployment Status'
+        inputs:
+          connectionType: 'Kubernetes Service Connection'
+          kubernetesServiceEndpoint: ${{ parameters.serviceConnection }}
+          namespace: ${{ parameters.namespace }}
+          command: 'get'
+          arguments: 'deployment kpt-ds-csi-operator -o wide'
+          secretType: 'dockerRegistry'
+          containerRegistryType: 'Container Registry'
+
+      - task: Kubernetes@1
+        displayName: 'Check Pod Status'
+        inputs:
+          connectionType: 'Kubernetes Service Connection'
+          kubernetesServiceEndpoint: ${{ parameters.serviceConnection }}
+          namespace: ${{ parameters.namespace }}
+          command: 'get'
+          arguments: 'pods -l app.kubernetes.io/name=kpt-ds-csi-operator -o wide'
+          secretType: 'dockerRegistry'
+          containerRegistryType: 'Container Registry'
+      
+      - task: Kubernetes@1
+        displayName: 'Verify DaemonSet Tolerations'
+        inputs:
+          connectionType: 'Kubernetes Service Connection'
+          kubernetesServiceEndpoint: ${{ parameters.serviceConnection }}
+          namespace: kube-system
+          command: 'get'
+          arguments: 'daemonset vsphere-csi-node -o jsonpath="{.spec.template.spec.tolerations[*].key}"'
+          secretType: 'dockerRegistry'
+          containerRegistryType: 'Container Registry'

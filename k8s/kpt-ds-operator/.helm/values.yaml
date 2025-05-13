@@ -1,0 +1,77 @@
+# Default values for kpt-ds-csi-operator
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: artifactory.chrobinson.com:5005/chr/kpt-ds-csi-operator
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+imagePullSecrets:
+  - name: artifactory-cfg
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+
+podAnnotations: {}
+
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Standard CH Robinson labels
+labels:
+  domain: engineering-platform
+  owner: KubernetesPlatform
+  component: kpt-ds-csi-operator
+
+# DaemonSet configuration
+daemonSet:
+  namespace: "kube-system"
+  name: "vsphere-csi-node"
+
+# Toleration to be enforced
+toleration:
+  key: "dedicated"
+  value: "prometheus"
+  effect: "NoSchedule"
+
+# APM configuration
+apm:
+  technology: go

@@ -1,0 +1,51 @@
+replicaCount: 1
+
+image:
+  repository: artifactory.chrobinson.com:5005/chr/kpt-ds-csi-operator
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets:
+  - name: artifactory-cfg
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+rbac:
+  create: true
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# DaemonSet configuration
+daemonSet:
+  namespace: "kube-system"
+  name: "vsphere-csi-node"
+
+# Toleration to be enforced
+toleration:
+  key: "dedicated"
+  value: "prometheus"
+  effect: "NoSchedule"

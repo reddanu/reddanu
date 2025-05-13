@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test files
+*.test
+*.out
+
+# Editor and IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Documentation 
+docs/
+*.md
+!README.md
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Helm chart files
+.helm/

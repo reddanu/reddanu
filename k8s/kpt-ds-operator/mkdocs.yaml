@@ -1,0 +1,49 @@
+site_name: kpt-ds-csi-operator
+site_description: Documentation for DaemonSet Toleration Operator
+site_author: Your Company
+
+repo_url: https://github.com/ch-robinson-internal/kpt-ds-csi-operator
+edit_uri: edit/main/docs/
+
+# Theme and navigation
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Usage: usage.md
+
+# Extensions
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed
+  - pymdownx.critic
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - admonition
+  - toc:
+      permalink: true
+
+plugins:
+  - search

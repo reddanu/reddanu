@@ -1,0 +1,19 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: "kpt-ds-csi-operator"
+  title: "kpt-ds-csi-operator"
+  annotations:
+    backstage.io/source-location: url:https://github.com/ch-robinson-internal/kpt-ds-csi-operator/
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - url: "https://chrobinson.sdelements.com/bunits/engineering-platform/kubernetes-platform-test/kptdscsioperator"
+      title: SD Elements
+  chr:
+    privacy:
+      pii: false
+spec:
+  system: "system:kubernetes-platform-test"
+  type: service
+  lifecycle: init

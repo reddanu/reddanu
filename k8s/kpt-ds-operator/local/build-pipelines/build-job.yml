@@ -1,0 +1,141 @@
+parameters:  
+- name: repoLowerName  
+  type: string  
+- name: helmVersion  
+  type: string  
+- name: releaseTag
+  type: string
+- name: releaseSuffix
+  type: string
+  default: ''
+- name: prRun
+  type: boolean 
+  default: true
+- name: dependsOn
+  type: string
+  default: ''
+
+jobs:
+- job: BuildAPI
+  displayName: 'Build & Stage Artifacts'
+  container: 'artifactory.chrobinson.com:5005/chr/cloud_azure_build_image:latest'
+  dependsOn: ${{ parameters.dependsOn }}
+  variables:
+    releaseTag: ${{ parameters.releaseTag }}
+    releaseSuffix: ${{ parameters.releaseSuffix }}
+    repoName: ${{ parameters.repoLowerName }}
+    artifact: ${{ parameters.repoLowerName }}-${{ parameters.releaseTag }}${{ parameters.releaseSuffix }}.tgz
+  steps:
+    - task: Bash@3
+      displayName: 'Debug Outputs'
+      name: debugOutputs
+      condition: eq(variables['System.Debug'],true)
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "This is the debug info:"
+          env
+    - checkout: self
+      persistCredentials: true
+      
+    - task: Bash@3
+      displayName: Set Go Configuration
+      inputs:
+        targetType: 'inline'
+        script: |
+          go env -w GOPRIVATE=github.com/ch-robinson-internal/*
+    
+    - task: Bash@3
+      displayName: Build the Operator
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Building operator with tag: $(releaseTag)$(releaseSuffix)"
+          go build -o bin/operator main.go
+          ls -la bin/
+        
+    - task: Bash@3
+      displayName: Run Unit Tests
+      inputs:
+        targetType: 'inline'
+        script: |
+          go test -v ./...
+
+    - task: Docker@2
+      displayName: 'Build docker image'
+      inputs:
+        containerRegistry: 'Docker (Artifactory)'
+        repository: 'chr/$(repoName)'
+        command: 'build'
+        Dockerfile: "$(System.DefaultWorkingDirectory)/Dockerfile"
+        tags: '$(releaseTag)$(releaseSuffix),latest'
+    
+    - task: Docker@2
+      displayName: 'Push tagged docker image'
+      inputs:
+        containerRegistry: 'Docker (Artifactory)'
+        repository: 'chr/$(repoName)'
+        command: 'push'
+        tags: '$(releaseTag)$(releaseSuffix)'
+    
+    - task: Docker@2
+      displayName: 'Push latest docker image'
+      condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      inputs:
+        containerRegistry: 'Docker (Artifactory)'
+        repository: 'chr/$(repoName)'
+        command: 'push'
+        tags: 'latest'
+    
+    - task: Bash@3
+      displayName: 'Delete local docker image'
+      continueOnError: true
+      inputs:
+        targetType: 'inline'
+        script: docker rmi $(docker images --filter=reference="*/chr/$(repoName)*:*" -q) -f
+
+    - task: HelmDeploy@0
+      displayName: 'Package Helm Chart'
+      inputs:
+        command: 'package'
+        updatedependency: true
+        chartPath: "$(System.DefaultWorkingDirectory)/.helm"
+        chartVersion: "$(releaseTag)$(releaseSuffix)"
+        destination: "$(System.DefaultWorkingDirectory)/.helm/build"
+
+    - task: PublishPipelineArtifact@1
+      displayName: "Publish Helm Chart Artifact"
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/.helm/build'
+        artifactName: '$(repoName)-$(releaseTag)$(releaseSuffix).tgz'
+    
+    - task: ArtifactoryGenericUpload@2
+      displayName: 'Upload to Artifactory'
+      inputs:
+        artifactoryService: 'Artifactory - OnPrem'
+        specSource: 'taskConfiguration'
+        fileSpec: |
+          {
+            "files": [
+              {
+                "pattern": "$(System.DefaultWorkingDirectory)/.helm/build/$(repoName)-$(releaseTag)$(releaseSuffix).tgz",
+                "target": "helm/"
+              }
+            ]
+          }
+        failNoOp: true
+      condition: and(succeeded(),ne(variables['Build.Reason'], 'PullRequest'))
+
+    - task: Bash@3
+      name: gitTag
+      condition: and(succeeded(),ne(variables['Build.Reason'], 'PullRequest'))
+      displayName: 'Generate git tag'
+      inputs:
+        workingDirectory: "$(System.DefaultWorkingDirectory)"
+        targetType: 'inline'
+        script: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git tag -a $(releaseTag)$(releaseSuffix) -m "Staging release $(releaseTag)$(releaseSuffix)"
+          git push origin $(releaseTag)$(releaseSuffix)

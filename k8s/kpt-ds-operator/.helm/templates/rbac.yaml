@@ -1,0 +1,30 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kpt-ds-csi-operator.serviceAccountName" . }}
+  labels:
+    {{- include "kpt-ds-csi-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kpt-ds-csi-operator.serviceAccountName" . }}
+  labels:
+    {{- include "kpt-ds-csi-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kpt-ds-csi-operator.serviceAccountName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kpt-ds-csi-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

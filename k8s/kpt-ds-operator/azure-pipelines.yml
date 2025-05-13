@@ -1,0 +1,127 @@
+# https://aka.ms/yaml  
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
+#https://github.com/ch-robinson-internal/CloudTechnologies.ADO.Library/tree/main
+resources:
+  repositories:
+  - repository: templates
+    type: github
+    name: "ch-robinson-internal/CloudTechnologies.ADO.Library"
+    endpoint: "GitHub - CH Robinson Internal"
+  - repository: self
+    clean: true
+ 
+trigger:
+  branches:
+    include:
+      - main
+      - development
+      - refs/pull/*/merge
+  paths:
+    exclude:
+      - '*.md'
+      - docs
+      - .github
+      - local/testdata
+      - catalog-info.yaml
+      - api/catalog-info.yaml
+      - controller/catalog-info.yaml
+
+pr:
+  branches:
+    include:
+      - development
+      - main
+      - refs/pull/*/merge
+  paths:
+    exclude:
+      - '*.md'
+      - .github
+      - catalog-info.yaml
+      - api/catalog-info.yaml
+      - controller/catalog-info.yaml
+      - monitoring/*
+      
+variables:
+  major: 0
+  minor: 0
+  rev: $[counter(variables['major'], 0)]
+  helmVersion: 3.11.3
+  varAlpineBuildImage: 'cloudtechnologies-build-image:1.0.49'
+  
+  # Cluster configuration
+  cluster_region: ebdc
+  cluster_name: eb-reddanu-np-k8s
+  cluster_namespace: kube-system
+  
+  repoLowerName: kpt-ds-csi-operator
+  releaseName: kpt-ds-csi-operator
+  
+  publishHelmChart: true
+  publishStagingHelmChart: false
+  system.debug: true
+  Agent.Diagnostic: true
+  agent.image: 'artifactory.chrobinson.com:5005/chr/cloud_azure_build_image'
+
+########################################################
+# JOB DEFINED HERE
+########################################################
+extends:
+  template: pipelines/base-template.yml@templates
+  parameters:
+    stages:
+    - stage: 'pullRequest'
+      displayName: 'Pull Request'
+      pool:
+        name: 'OnPrem Agents - Prod - Lin'
+      condition: and( or (succeeded(),not(canceled())), eq(variables['Build.Reason'], 'PullRequest'))
+      variables:
+        repoLowerName: ${{ variables.repoLowerName }}
+        releaseName: $(releaseName)
+      jobs:
+        - template: /local/build-pipelines/build-job.yml@self
+          parameters:
+            repoLowerName: ${{ variables.repoLowerName }}
+            helmVersion: $(helmVersion)
+            releaseTag: $(System.PullRequest.PullRequestNumber)
+            releaseSuffix: '-pull-request'
+
+        - template: /local/build-pipelines/install-and-test-job.yml@self
+          parameters:
+            dependsOn: BuildAPI
+            helmVersion: $(helmVersion)
+            # Cluster configuration
+            region: $(cluster_region)
+            serviceConnection: $(cluster_name)
+            clusterName: $(cluster_name)
+            namespace: $(cluster_namespace)
+            # Common parameters
+            valueFile: '.helm/values-dev-centralus.yaml'
+            releaseName: $(releaseName)
+            enableInstall: true
+            enableTests: true
+            releaseTag: $(System.PullRequest.PullRequestNumber)
+            releaseSuffix: '-pull-request'
+            repoName: $(repoLowerName)
+            prRun: true
+
+    - stage: 'releaseStage'
+      displayName: 'Release Stage'
+      pool:
+        name: 'OnPrem Agents - Prod - Lin'
+      condition: eq(variables['build.sourceBranch'], 'refs/heads/main')
+      variables:
+        - group: devops-ado-shared
+      jobs:
+        - template: /local/build-pipelines/get-tag.yml@self
+          parameters:
+            major: $(major)
+            minor: $(minor)
+
+        - template: /local/build-pipelines/build-job.yml@self
+          parameters:
+            dependsOn: getTag
+            repoLowerName: $(repoLowerName)
+            helmVersion: $(helmVersion)
+            releaseTag: $[ dependencies.getTag.outputs['git.nextTag'] ]
+            prRun: false
