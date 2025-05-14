@@ -1,3 +1,3 @@
 # My New Folder
 
-This is a new folder created in my GitHub repository for K8s
+This repositry will contain all k8s infra apps and scripts
