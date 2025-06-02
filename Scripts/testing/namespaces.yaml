@@ -1,0 +1,43 @@
+--- 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kpt1
+  labels:
+    backstageSystem: "kpt1"
+    ako-gslb: "enabled"
+    avioperator: "1"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kpt2
+  labels:
+    backstageSystem: "kpt2"
+    ako-gslb: "enabled"
+    avioperator: "2"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kpt3
+  labels:
+    backstageSystem: "kpt3"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kpt4
+  labels:
+    backstageSystem: "kpt4"
+--- 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kpt5
+
+--- 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kpt6
