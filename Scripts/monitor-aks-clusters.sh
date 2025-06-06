@@ -7,7 +7,7 @@ set -uo pipefail
 IFS=$'\n\t'
 
 # Trap SIGINT and SIGTERM to exit gracefully
-trap 'log INFO "Script interrupted"; exit 1' INT TERM
+trap 'echo "$(date "+%F %T") [INFO] Script interrupted"; exit 1' INT TERM
 
 # ----- Configuration -----
 # Comma-separated list of subscription IDs (override with env FOCUS_SUBSCRIPTIONS)
@@ -16,8 +16,6 @@ FOCUS_SUBSCRIPTIONS=${FOCUS_SUBSCRIPTIONS:-}
 SEND_NOTIFICATIONS=${SEND_NOTIFICATIONS:-true}
 # Power Automate workflow URL for Teams notifications
 TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL:-"https://prod-168.westus.logic.azure.com:443/workflows/77727c0319c14177ae09b08172139816/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=BLO3PCIBtR1qs-qoEpzcW7_d7s8BWkFE4wkD_TnMHrQ"}
-# Log file
-LOG_FILE="./aks-health-$(date +%Y%m%d-%H%M%S).log"
 
 # Hard-coded subscription IDs to monitor
 HARD_CODED_SUBS=(
@@ -33,7 +31,7 @@ HARD_CODED_SUBS=(
 # ----- Helpers -----
 log() {
   local level=$1; shift
-  echo "$(date '+%F %T') [$level] $*" | tee -a "$LOG_FILE"
+  echo "$(date '+%F %T') [$level] $*"
 }
 
 error_exit() {
@@ -233,11 +231,17 @@ if [[ ${#CLUSTER_FAILED_ROWS[@]} -eq 0 && ${#NODEPOOL_FAILED_ROWS[@]} -eq 0 ]]; 
     "00FF00" \
     "Checked $(echo "${SUBS[@]}" | wc -w | tr -d ' ') subscriptions."
 else
-  # Build detailed failure information for Teams - using a cleaner format with emojis
-  detailed_failures=""
+  # Build simple, clean text format that works well with Teams
+  timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+  summary="Found ${#CLUSTER_FAILED_ROWS[@]} cluster failure(s) and ${#NODEPOOL_FAILED_ROWS[@]} nodepool failure(s)"
   
+  # Create a clean, simple format for Teams that matches the screenshot
+  detailed_failures="**AKS Cluster & Nodepool Health Status**\n\n"
+  detailed_failures+="_Last checked: ${timestamp}_\n\n"
+  
+  # Add cluster failures section if there are any
   if [[ ${#CLUSTER_FAILED_ROWS[@]} -gt 0 ]]; then
-    detailed_failures+="**🚨 CLUSTER FAILURES (${#CLUSTER_FAILED_ROWS[@]}):**\n\n"
+    detailed_failures+="🔴 **CLUSTER FAILURES (${#CLUSTER_FAILED_ROWS[@]})**\n\n"
     
     for row in "${CLUSTER_FAILED_ROWS[@]}"; do
       sub=$(echo "$row" | cut -d'|' -f1)
@@ -246,14 +250,13 @@ else
       pwr=$(echo "$row" | cut -d'|' -f4)
       prov=$(echo "$row" | cut -d'|' -f5)
       
-      detailed_failures+="- **Cluster**: $cl\n"
-      detailed_failures+="  • Resource Group: $rg\n"
-      detailed_failures+="  • Power: $pwr\n"
-      detailed_failures+="  • Provisioning: $prov\n"
-      detailed_failures+="  • Subscription: $sub\n\n"
+      # Format using bullet points
+      detailed_failures+="* **${cl}** - Power: ${pwr}, Provisioning: **${prov}**\n"
     done
+    detailed_failures+="\n"
   fi
   
+  # Add nodepool failures section if there are any
   if [[ ${#NODEPOOL_FAILED_ROWS[@]} -gt 0 ]]; then
     detailed_failures+="🔧 **NODEPOOL FAILURES (${#NODEPOOL_FAILED_ROWS[@]})**\n\n"
     
@@ -262,176 +265,20 @@ else
       pwr=$(echo "$row" | cut -d'|' -f4)
       prov=$(echo "$row" | cut -d'|' -f5)
       
-      detailed_failures+="- **${clnp}** - Power: ${pwr}, Provisioning: **${prov}**\n"
+      # Format using bullet points matching the screenshot
+      detailed_failures+="* **${clnp}** - Power: ${pwr}, Provisioning: **${prov}**\n"
     done
   fi
   
-  # Now create the adaptive card JSON - properly escaped for shell
-  adaptive_card=$(cat <<EOF
-{
-  "type": "AdaptiveCard",
-  "body": [
-    {
-      "type": "TextBlock",
-      "size": "Large",
-      "weight": "Bolder",
-      "text": "🚨 AKS Health Check - Issues Detected"
-    },
-    {
-      "type": "TextBlock",
-      "text": "${summary}",
-      "wrap": true
-    },
-    {
-      "type": "TextBlock",
-      "text": "Last checked: ${timestamp}",
-      "wrap": true,
-      "isSubtle": true,
-      "spacing": "Small"
-    },
-    {
-      "type": "ColumnSet",
-      "columns": [
-        {
-          "type": "Column",
-          "width": "stretch",
-          "items": [
-            {
-              "type": "TextBlock",
-              "text": "AKS Cluster & Nodepool Health Status",
-              "wrap": true,
-              "weight": "Bolder",
-              "size": "Medium",
-              "spacing": "Medium"
-            }
-          ]
-        }
-      ]
-    }
-EOF
-)
-
-  # Add cluster failures section if there are any
-  if [[ ${#CLUSTER_FAILED_ROWS[@]} -gt 0 ]]; then
-    adaptive_card+=$(cat <<EOF
-,
-    {
-      "type": "TextBlock",
-      "text": "🔴 CLUSTER FAILURES (${#CLUSTER_FAILED_ROWS[@]})",
-      "wrap": true,
-      "weight": "Bolder",
-      "spacing": "Medium"
-    },
-    {
-      "type": "FactSet",
-      "facts": [
-EOF
-)
-
-    first=true
-    for row in "${CLUSTER_FAILED_ROWS[@]}"; do
-      sub=$(echo "$row" | cut -d'|' -f1)
-      rg=$(echo "$row" | cut -d'|' -f2)
-      cl=$(echo "$row" | cut -d'|' -f3)
-      pwr=$(echo "$row" | cut -d'|' -f4)
-      prov=$(echo "$row" | cut -d'|' -f5)
-      
-      if [[ "$first" == "true" ]]; then
-        first=false
-      else
-        adaptive_card+=","
-      fi
-      
-      adaptive_card+=$(cat <<EOF
-        {
-          "title": "${cl}",
-          "value": "Resource Group: ${rg}\\nPower State: ${pwr}\\nProvisioning State: **${prov}**"
-        }
-EOF
-)
-    done
-    
-    adaptive_card+=$(cat <<EOF
-      ]
-    }
-EOF
-)
-  fi
-  
-  # Add nodepool failures section if there are any
-  if [[ ${#NODEPOOL_FAILED_ROWS[@]} -gt 0 ]]; then
-    adaptive_card+=$(cat <<EOF
-,
-    {
-      "type": "TextBlock",
-      "text": "🔧 NODEPOOL FAILURES (${#NODEPOOL_FAILED_ROWS[@]})",
-      "wrap": true,
-      "weight": "Bolder",
-      "spacing": "Medium"
-    },
-    {
-      "type": "FactSet",
-      "facts": [
-EOF
-)
-
-    first=true
-    for row in "${NODEPOOL_FAILED_ROWS[@]}"; do
-      clnp=$(echo "$row" | cut -d'|' -f3)
-      pwr=$(echo "$row" | cut -d'|' -f4)
-      prov=$(echo "$row" | cut -d'|' -f5)
-      
-      if [[ "$first" == "true" ]]; then
-        first=false
-      else
-        adaptive_card+=","
-      fi
-      
-      adaptive_card+=$(cat <<EOF
-        {
-          "title": "${clnp}",
-          "value": "Power State: ${pwr}\\nProvisioning State: **${prov}**"
-        }
-EOF
-)
-    done
-    
-    adaptive_card+=$(cat <<EOF
-      ]
-    }
-EOF
-)
-  fi
-  
-  # Close the adaptive card JSON
-  adaptive_card+=$(cat <<EOF
-  ],
-  "actions": [
-    {
-      "type": "Action.OpenUrl",
-      "title": "View in Azure Portal",
-      "url": "https://portal.azure.com/#blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FmanagedClusters"
-    }
-  ],
-  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-  "version": "1.5"
-}
-EOF
-)
-
-  # Send the Teams notification
+  # Send the Teams notification with the simple, clean format
   send_teams_notification \
     "🚨 AKS Health Check - Issues Detected" \
     "$summary" \
     "FF0000" \
     "$detailed_failures"
-    
-  # Output the adaptive card JSON to a file for use with Power Automate
-  echo "$adaptive_card" > "./aks-health-adaptive-card.json"
-  log INFO "Adaptive Card JSON saved to ./aks-health-adaptive-card.json"
 fi
 
-log INFO "Done. Log file: $LOG_FILE"
+log INFO "Done."
 exit 0
 
 
