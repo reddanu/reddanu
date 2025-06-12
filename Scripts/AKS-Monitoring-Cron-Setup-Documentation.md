@@ -72,35 +72,52 @@ We configured the cron job as a system-wide job (visible to all users) by creati
 # Set PATH to include Azure CLI location
 PATH=/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin
 
-# AKS Monitoring Cron Jobs
-# Run at 7:30 AM CST (Central Standard Time)
-30 7 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-cst.log 2>&1
+# AKS Monitoring Cron Jobs - Scheduled in UTC time
+# Run at 7:30 AM CST = 13:30 UTC (1:30 PM UTC)
+30 13 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-cst.log 2>&1
 
-# Run at 8:00 AM Poland time (CET/CEST)
-0 8 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-poland.log 2>&1
+# Run at 8:00 AM Poland time = 07:00 UTC (Winter CET) / 06:00 UTC (Summer CEST)
+# Using 07:00 UTC for winter schedule (CET = UTC+1)
+0 7 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-poland-winter.log 2>&1
+
+# Using 06:00 UTC for summer schedule (CEST = UTC+2) - Uncomment during daylight saving time
+# 0 6 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-poland-summer.log 2>&1
 ```
 
 ### Key Configuration Elements
 
-#### 1. PATH Environment Variable
+#### 1. UTC-Based Scheduling
 ```bash
-PATH=/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin
+# CST Schedule: 7:30 AM CST = 13:30 UTC
+30 13 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh
+
+# Poland Winter Schedule: 8:00 AM CET = 07:00 UTC  
+0 7 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh
+
+# Poland Summer Schedule: 8:00 AM CEST = 06:00 UTC
+0 6 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh
 ```
-- **Purpose**: Ensures the Azure CLI (`az` command) is available when cron runs
-- **Critical**: Without this, the script fails with "Missing dependency: az"
 
-#### 2. Schedule Times
-- **7:30 AM CST**: `30 7 * * *` (Central Standard Time)
-- **8:00 AM Poland Time**: `0 8 * * *` (Central European Time/Central European Summer Time)
+#### 2. Time Zone Conversion Reference
+- **CST (Central Standard Time)**: UTC-6 hours
+  - 7:30 AM CST = 13:30 UTC (1:30 PM UTC)
+- **CET (Central European Time - Winter)**: UTC+1 hour  
+  - 8:00 AM CET = 07:00 UTC (7:00 AM UTC)
+- **CEST (Central European Summer Time)**: UTC+2 hours
+  - 8:00 AM CEST = 06:00 UTC (6:00 AM UTC)
 
-#### 3. User Context
-- **User**: `reddanupa` - The script runs under this user account
-- **Important**: The user must have Azure CLI authentication configured
+#### 3. Seasonal Schedule Management
+For Poland time, you'll need to manually switch between winter and summer schedules:
 
-#### 4. Output Redirection
-- **CST Run**: Output goes to `/var/log/aks-monitor-cst.log`
-- **Poland Time Run**: Output goes to `/var/log/aks-monitor-poland.log`
-- **Error Handling**: `2>&1` captures both stdout and stderr
+**Winter Schedule (CET - typically October to March):**
+```bash
+0 7 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-poland-winter.log 2>&1
+```
+
+**Summer Schedule (CEST - typically March to October):**
+```bash
+0 6 * * * reddanupa /home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-poland-summer.log 2>&1
+```
 
 ### File Permissions
 ```bash
@@ -109,7 +126,8 @@ sudo chmod 644 /etc/cron.d/monitor-aks-clusters
 
 # Log file permissions (if pre-created)
 sudo chmod 666 /var/log/aks-monitor-cst.log
-sudo chmod 666 /var/log/aks-monitor-poland.log
+sudo chmod 666 /var/log/aks-monitor-poland-winter.log
+sudo chmod 666 /var/log/aks-monitor-poland-summer.log
 ```
 
 ## Testing and Verification
@@ -155,7 +173,8 @@ cat /var/log/aks-monitor-test.log
 ### Log Locations
 - **Cron System Logs**: `/var/log/cron`
 - **CST Execution Logs**: `/var/log/aks-monitor-cst.log`
-- **Poland Time Execution Logs**: `/var/log/aks-monitor-poland.log`
+- **Poland Winter Execution Logs**: `/var/log/aks-monitor-poland-winter.log`
+- **Poland Summer Execution Logs**: `/var/log/aks-monitor-poland-summer.log`
 
 ### Monitoring Commands
 ```bash
@@ -167,7 +186,8 @@ sudo grep CRON /var/log/cron | tail -20
 
 # View specific execution logs
 tail -f /var/log/aks-monitor-cst.log
-tail -f /var/log/aks-monitor-poland.log
+tail -f /var/log/aks-monitor-poland-winter.log
+tail -f /var/log/aks-monitor-poland-summer.log
 
 # Check for cron job reloads
 sudo grep "monitor-aks-clusters" /var/log/cron
@@ -177,7 +197,7 @@ sudo grep "monitor-aks-clusters" /var/log/cron
 When working correctly, you should see entries like:
 ```
 Jun  6 18:08:01 rh01dv-kpt001 crond[1170321]: (*system*) RELOAD (/etc/cron.d/monitor-aks-clusters)
-Jun  6 07:30:01 rh01dv-kpt001 CROND[xxxxxx]: (reddanupa) CMD (/home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-cst.log 2>&1)
+Jun  6 13:30:01 rh01dv-kpt001 CROND[xxxxxx]: (reddanupa) CMD (/home/chrobinson.com/reddanupa/monitor-aks-clusters.sh > /var/log/aks-monitor-cst.log 2>&1)
 ```
 
 ## Troubleshooting
