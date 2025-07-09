@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set to true for dry-run (no actual restarts), false for real execution
-DRY_RUN=false
+DRY_RUN=true
 
 # Define target namespaces
 target_namespaces=(
