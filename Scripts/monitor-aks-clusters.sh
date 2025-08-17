@@ -15,7 +15,7 @@ FOCUS_SUBSCRIPTIONS=${FOCUS_SUBSCRIPTIONS:-}
 # Enable notifications (true/false)
 SEND_NOTIFICATIONS=${SEND_NOTIFICATIONS:-true}
 # Power Automate workflow URL for Teams notifications
-TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL:-"https://prod-168.westus.logic.azure.com:443/workflows/77727c0319c14177ae09b08172139816/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=BLO3PCIBtR1qs-qoEpzcW7_d7s8BWkFE4wkD_TnMHrQ"}
+TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL:-""}
 
 # Hard-coded subscription IDs to monitor
 HARD_CODED_SUBS=(
