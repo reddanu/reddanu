@@ -26,7 +26,7 @@ PATH=/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin
 scp monitor-aks-clusters.sh reddanupa@rh01dv-kpt001.chrobinson.com:~/
 
 # 2. SSH to server
-ssh reddanupa@rh01dv-kpt001.chrobinson.com
+ssh abcd@rh01dv.online.com
 
 # 3. Make executable
 chmod +x monitor-aks-clusters.sh
